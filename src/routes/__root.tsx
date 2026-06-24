@@ -9,7 +9,9 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import logoUrl from "../assets/logo-b64";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { SolanaProviders } from "../components/solana/wallet-provider";
 
 function NotFoundComponent() {
   return (
@@ -98,6 +100,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: logoUrl, type: "image/png" },
+      { rel: "apple-touch-icon", href: logoUrl },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -131,7 +135,9 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <SolanaProviders>
+        <Outlet />
+      </SolanaProviders>
     </QueryClientProvider>
   );
 }
