@@ -1,21 +1,27 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { useState } from "react";
+import logoUrl from "../assets/logo-b64";
+import { ConnectWallet } from "./solana/connect-wallet";
+import { clusterBadge } from "./solana/network-status";
 
 export function SiteHeader() {
+  const [open, setOpen] = useState(false);
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-        <Link to="/" className="flex items-center gap-2">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
+        <Link to="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
           <Logo />
           <span className="font-mono text-sm font-semibold tracking-tight">InferNode</span>
           <span className="ml-2 hidden rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground sm:inline">
-            devnet
+            {clusterBadge()}
           </span>
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
           <NavLink to="/providers">Providers</NavLink>
           <NavLink to="/docs">Docs</NavLink>
+          <NavLink to="/whitepaper">Whitepaper</NavLink>
           <NavLink to="/pricing">Pricing</NavLink>
         </nav>
 
@@ -28,20 +34,56 @@ export function SiteHeader() {
           </Link>
           <Link
             to="/app/new"
-            className="rounded-md bg-foreground px-3 py-1.5 font-mono text-xs text-background transition-opacity hover:opacity-90"
+            className="hidden rounded-md bg-foreground px-3 py-1.5 font-mono text-xs text-background transition-opacity hover:opacity-90 sm:inline-flex"
           >
             Submit job →
           </Link>
+          <div className="hidden sm:block">
+            <ConnectWallet compact />
+          </div>
+          <button
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface md:hidden"
+            onClick={() => setOpen((v) => !v)}
+            aria-label="Toggle menu"
+          >
+            <span className="font-mono text-xs leading-none">{open ? "✕" : "☰"}</span>
+          </button>
         </div>
       </div>
+
+      {open && (
+        <div className="border-t border-border bg-background/95 backdrop-blur md:hidden">
+          <nav className="mx-auto max-w-7xl px-4 py-3 space-y-1">
+            <MobileNavLink to="/providers" onClick={() => setOpen(false)}>Providers</MobileNavLink>
+            <MobileNavLink to="/docs" onClick={() => setOpen(false)}>Docs</MobileNavLink>
+            <MobileNavLink to="/whitepaper" onClick={() => setOpen(false)}>Whitepaper</MobileNavLink>
+            <MobileNavLink to="/pricing" onClick={() => setOpen(false)}>Pricing</MobileNavLink>
+            <div className="my-2 border-t border-border" />
+            <MobileNavLink to="/app" onClick={() => setOpen(false)}>Open app</MobileNavLink>
+            <MobileNavLink to="/app/new" onClick={() => setOpen(false)}>Submit job →</MobileNavLink>
+          </nav>
+        </div>
+      )}
     </header>
+  );
+}
+
+function MobileNavLink({ to, children, onClick }: { to: string; children: ReactNode; onClick?: () => void }) {
+  return (
+    <Link
+      to={to}
+      onClick={onClick}
+      className="block rounded-md px-3 py-2.5 font-mono text-sm text-foreground/80 hover:bg-surface hover:text-foreground"
+    >
+      {children}
+    </Link>
   );
 }
 
 export function SiteFooter() {
   return (
     <footer className="border-t border-border bg-background">
-      <div className="mx-auto grid max-w-7xl gap-8 px-6 py-12 md:grid-cols-4">
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 sm:py-12 md:grid-cols-4">
         <div className="md:col-span-2">
           <div className="flex items-center gap-2">
             <Logo />
@@ -55,17 +97,20 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <FooterCol title="Product" items={[
-          ["Submit job", "/app/new"],
-          ["Buyer dashboard", "/app"],
-          ["Provider portal", "/providers"],
-          ["Pricing", "/pricing"],
-        ]} />
-        <FooterCol title="Developers" items={[
-          ["Documentation", "/docs"],
-          ["Worker CLI", "/docs"],
-          ["Anchor program", "/docs"],
-        ]} />
+        <div className="grid grid-cols-2 gap-8 md:col-span-2 md:grid-cols-2">
+          <FooterCol title="Product" items={[
+            ["Submit job", "/app/new"],
+            ["Buyer dashboard", "/app"],
+            ["Provider portal", "/providers"],
+            ["Pricing", "/pricing"],
+          ]} />
+          <FooterCol title="Developers" items={[
+            ["Whitepaper", "/whitepaper"],
+            ["Documentation", "/docs"],
+            ["Worker CLI", "/docs"],
+            ["Anchor program", "/docs"],
+          ]} />
+        </div>
       </div>
     </footer>
   );
@@ -102,12 +147,15 @@ function NavLink({ to, children }: { to: string; children: ReactNode }) {
   );
 }
 
-export function Logo() {
+export function Logo({ size = 8 }: { size?: number }) {
+  const px = size * 4;
   return (
-    <div className="grid h-6 w-6 place-items-center rounded border border-border bg-surface">
-      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-foreground" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M4 7h6M4 12h16M14 17h6M4 17h6M14 7h6" strokeLinecap="square" />
-      </svg>
-    </div>
+    <img
+      src={logoUrl}
+      alt="InferNode logo"
+      width={px}
+      height={px}
+      style={{ width: px, height: px, objectFit: "contain", display: "block" }}
+    />
   );
 }
