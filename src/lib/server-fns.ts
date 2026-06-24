@@ -8,6 +8,7 @@ import {
   getNetworkStats,
   getOrCreateUser,
   listJobsByWallet,
+  listModelCatalog,
   listProvidersWithStats,
   registerProviderRecord,
 } from "../server/core";
@@ -82,3 +83,6 @@ export const networkStats = createServerFn({ method: "GET" }).handler(
   async () => getNetworkStats(),
 );
 
+export const listModels = createServerFn({ method: "GET" }).handler(
+  async () => listModelCatalog(),
+);
