@@ -12,4 +12,35 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    server: {
+      host: "0.0.0.0",
+      port: 5000,
+      allowedHosts: true,
+    },
+    preview: {
+      host: "0.0.0.0",
+      port: 5000,
+      strictPort: true,
+      allowedHosts: true,
+    },
+    // Solana web3.js needs a browser Buffer in the CLIENT bundle. The trailing
+    // slash forces Vite to resolve the npm `buffer` shim instead of the Node
+    // builtin. We scope this to the client only — on the server the native
+    // Node `Buffer` is used (the CJS shim would break the SSR ESM runner).
+    optimizeDeps: {
+      include: ["buffer"],
+    },
+    // Per-environment `resolve.alias` works at runtime but isn't in Vite's
+    // exported types yet, so cast to keep the SSR/client split type-safe.
+    environments: {
+      client: {
+        resolve: {
+          alias: {
+            buffer: "buffer/",
+          },
+        } as Record<string, unknown>,
+      },
+    },
+  },
 });
