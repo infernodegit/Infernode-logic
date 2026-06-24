@@ -1,36 +1,81 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { computePrice, estimateTokensFromText, formatSol, type TaskType } from "../lib/pricing";
+import { TASKS, MODELS } from "../lib/tasks";
+import { payForJob } from "../lib/solana-pay";
+import { TREASURY_WALLET } from "../lib/solana-config";
+import { createJob, confirmPayment, ensureUser } from "../lib/server-fns";
 
 export const Route = createFileRoute("/app/new")({
   head: () => ({ meta: [{ title: "New job · InferNode" }] }),
   component: NewJob,
 });
 
-const TASKS = [
-  { id: "text-generation", label: "Text generation", glyph: "T", desc: "Prompt → text output" },
-  { id: "summarization", label: "Summarization", glyph: "S", desc: "Long text → summary" },
-  { id: "embedding", label: "Embedding", glyph: "E", desc: "Text → vector" },
-  { id: "classification", label: "Classification", glyph: "C", desc: "Input → label + confidence" },
-  { id: "code-review", label: "Code review", glyph: "{ }", desc: "Code snippet → review" },
-];
-
-const MODELS = ["llama3.1:8b", "llama3.1:70b", "mistral:7b", "qwen2.5:14b", "deepseek-coder:6.7b"];
-
-const BASE = 0.0001;
-const PER_K = 0.0005;
-const FEE = 0.05;
+type Phase = "idle" | "creating" | "paying" | "confirming";
 
 function NewJob() {
-  const [task, setTask] = useState("text-generation");
-  const [model, setModel] = useState("llama3.1:8b");
-  const [input, setInput] = useState("Write a concise product summary for a Solana-native AI compute marketplace.");
-  const [maxOutput, setMaxOutput] = useState(512);
+  const navigate = useNavigate();
+  const wallet = useWallet();
+  const { connected, publicKey } = wallet;
 
-  const inputTokens = Math.max(1, Math.ceil(input.length / 4));
-  const totalTokens = inputTokens + maxOutput;
-  const price = useMemo(() => BASE + (totalTokens / 1000) * PER_K, [totalTokens]);
-  const fee = price * FEE;
-  const payout = price - fee;
+  const [task, setTask] = useState<TaskType>("TEXT_GENERATION");
+  const [model, setModel] = useState(MODELS[0]);
+  const [input, setInput] = useState(
+    "Write a concise product summary for a Solana-native AI compute marketplace.",
+  );
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  const price = useMemo(() => {
+    const tokens = estimateTokensFromText(input || " ");
+    return computePrice(tokens);
+  }, [input]);
+
+  const busy = phase !== "idle";
+
+  async function handlePay() {
+    setError(null);
+    if (!connected || !publicKey) {
+      setError("Connect your wallet first.");
+      return;
+    }
+    if (!TREASURY_WALLET) {
+      setError(
+        "Treasury wallet is not configured yet. The marketplace owner must set VITE_TREASURY_WALLET before payments can be accepted.",
+      );
+      return;
+    }
+    if (!input.trim()) {
+      setError("Input cannot be empty.");
+      return;
+    }
+    const walletAddress = publicKey.toBase58();
+    try {
+      setPhase("creating");
+      await ensureUser({ data: { walletAddress } });
+      const job = await createJob({
+        data: { walletAddress, taskType: task, modelName: model, input },
+      });
+      setPhase("paying");
+      const { signature } = await payForJob(wallet, job.priceLamports);
+      setPhase("confirming");
+      await confirmPayment({ data: { jobId: job.id, txSignature: signature } });
+      navigate({ to: "/app/jobs" });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong.");
+      setPhase("idle");
+    }
+  }
+
+  const payLabel =
+    phase === "creating"
+      ? "Creating job…"
+      : phase === "paying"
+        ? "Confirm in wallet…"
+        : phase === "confirming"
+          ? "Confirming on-chain…"
+          : `Pay ${formatSol(price.totalLamports)} SOL & submit →`;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -40,7 +85,7 @@ function NewJob() {
         </div>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Submit an inference task</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Configure your job, fund the escrow, and a provider will pick it up.
+          Configure your job, pay in SOL on mainnet, and a provider will pick it up.
         </p>
       </header>
 
@@ -103,16 +148,9 @@ function NewJob() {
               placeholder="Paste your prompt or input here…"
             />
             <div className="mt-2 flex items-center justify-between font-mono text-[11px] text-muted-foreground">
-              <span>{input.length} chars · ~{inputTokens} tokens</span>
-              <label className="flex items-center gap-2">
-                max output tokens
-                <input
-                  type="number"
-                  value={maxOutput}
-                  onChange={(e) => setMaxOutput(Math.max(1, Number(e.target.value) || 1))}
-                  className="w-20 rounded border border-border bg-background px-2 py-1 font-mono text-xs text-foreground"
-                />
-              </label>
+              <span>
+                {input.length} chars · ~{price.estimatedTokens} tokens (est.)
+              </span>
             </div>
           </Section>
         </div>
@@ -124,37 +162,44 @@ function NewJob() {
                 Estimate
               </div>
               <div className="space-y-3 p-5 font-mono text-sm">
-                <Line k="Input tokens" v={inputTokens.toString()} />
-                <Line k="Max output" v={maxOutput.toString()} />
-                <Line k="Base fee" v={`${BASE.toFixed(4)} SOL`} />
-                <Line k="Tokens cost" v={`${((totalTokens / 1000) * PER_K).toFixed(5)} SOL`} />
+                <Line k="Est. tokens" v={price.estimatedTokens.toString()} />
+                <Line k="Base fee" v={`${formatSol(price.baseFeeLamports)} SOL`} />
+                <Line k="Tokens cost" v={`${formatSol(price.tokenCostLamports)} SOL`} />
                 <div className="border-t border-border pt-3">
-                  <Line k="Subtotal" v={`${price.toFixed(5)} SOL`} bold />
-                  <Line k="Protocol fee (5%)" v={`-${fee.toFixed(5)}`} muted />
+                  <Line k="Subtotal" v={`${formatSol(price.subtotalLamports)} SOL`} bold />
+                  <Line k="Protocol fee (5%)" v={`+${formatSol(price.protocolFeeLamports)}`} muted />
+                  <Line k="Total" v={`${formatSol(price.totalLamports)} SOL`} bold />
                 </div>
                 <div className="rounded-md border border-border bg-background p-3">
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     Provider receives
                   </div>
-                  <div className="mt-1 text-lg text-foreground">{payout.toFixed(5)} SOL</div>
+                  <div className="mt-1 text-lg text-foreground">
+                    {formatSol(price.providerPayoutLamports)} SOL
+                  </div>
                 </div>
               </div>
               <div className="border-t border-border p-4">
-                <button className="w-full rounded-md bg-foreground py-2.5 font-mono text-xs text-background hover:opacity-90">
-                  Pay {price.toFixed(5)} SOL & submit →
+                <button
+                  onClick={handlePay}
+                  disabled={busy}
+                  className="w-full rounded-md bg-foreground py-2.5 font-mono text-xs text-background hover:opacity-90 disabled:opacity-60"
+                >
+                  {payLabel}
                 </button>
+                {!connected && (
+                  <div className="mt-2 text-center font-mono text-[10px] text-warning">
+                    Connect your wallet to pay.
+                  </div>
+                )}
+                {error && (
+                  <div className="mt-2 rounded border border-destructive/30 bg-destructive/10 p-2 text-center font-mono text-[10px] text-destructive">
+                    {error}
+                  </div>
+                )}
                 <div className="mt-2 text-center font-mono text-[10px] text-muted-foreground">
-                  Funds locked in Anchor escrow until result delivered.
+                  Real SOL transfer on Solana mainnet. Verify the amount in your wallet.
                 </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                Available providers
-              </div>
-              <div className="mt-2 flex items-center gap-2 font-mono text-sm text-foreground">
-                <span className="status-dot" /> 14 online · {model}
               </div>
             </div>
           </div>
