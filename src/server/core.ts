@@ -266,6 +266,28 @@ export async function listProvidersWithStats() {
   }));
 }
 
+export async function listModelCatalog() {
+  const rows = await db
+    .select({
+      modelName: providerCapabilities.modelName,
+      taskType: providerCapabilities.taskType,
+      providerCount: sql<number>`count(distinct ${providerCapabilities.providerId})`,
+      minPrice: sql<number>`min(${providerCapabilities.pricePerKTokensLamports})`,
+    })
+    .from(providerCapabilities)
+    .innerJoin(providers, eq(providerCapabilities.providerId, providers.id))
+    .where(eq(providers.isActive, true))
+    .groupBy(providerCapabilities.modelName, providerCapabilities.taskType)
+    .orderBy(desc(sql`count(distinct ${providerCapabilities.providerId})`))
+    .limit(20);
+  return rows.map((r) => ({
+    modelName: r.modelName,
+    taskType: r.taskType,
+    providerCount: Number(r.providerCount),
+    minPriceLamports: Number(r.minPrice),
+  }));
+}
+
 export async function getNetworkStats() {
   const [providerAgg] = await db
     .select({
