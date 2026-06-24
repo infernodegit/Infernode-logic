@@ -1,5 +1,7 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { Logo } from "./site-chrome";
+import { ConnectWallet } from "./solana/connect-wallet";
+import { NetworkStatus } from "./solana/network-status";
 import type { ReactNode } from "react";
 
 const NAV = [
@@ -49,45 +51,49 @@ export function AppShell({ children }: { children?: ReactNode }) {
           </div>
 
           <div className="mt-auto border-t border-border p-3">
-            <div className="rounded-md border border-border bg-background p-3">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                  Network
-                </span>
-                <span className="status-dot" />
-              </div>
-              <div className="mt-1 font-mono text-xs text-foreground">Solana devnet</div>
-              <div className="mt-2 truncate font-mono text-[10px] text-muted-foreground">
-                slot 287,441,902
-              </div>
-            </div>
+            <NetworkStatus />
           </div>
         </aside>
 
         <main className="min-h-screen flex-1">
           <TopBar />
-          <div className="px-6 py-8 md:px-10">{children ?? <Outlet />}</div>
+          <div className="px-4 py-6 pb-24 sm:px-6 sm:py-8 md:px-10 md:pb-8">
+            {children ?? <Outlet />}
+          </div>
         </main>
       </div>
+
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-border bg-background md:hidden">
+        {NAV.map((item) => {
+          const active = pathname === item.to || (item.to !== "/app" && pathname.startsWith(item.to));
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={
+                "flex flex-1 flex-col items-center gap-0.5 py-2.5 font-mono text-[9px] transition-colors " +
+                (active ? "text-foreground" : "text-muted-foreground")
+              }
+            >
+              <span className="text-base leading-none">{item.glyph}</span>
+              <span className="truncate">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }
 
 function TopBar() {
   return (
-    <div className="flex h-14 items-center justify-between border-b border-border bg-background px-6 md:px-10">
-      <div className="flex items-center gap-3 font-mono text-xs text-muted-foreground">
+    <div className="flex h-14 items-center justify-between border-b border-border bg-background px-4 sm:px-6 md:px-10">
+      <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
         <Link to="/" className="hover:text-foreground">~/</Link>
-        <span>infernode</span>
+        <span className="hidden sm:inline">infernode</span>
       </div>
       <div className="flex items-center gap-2">
-        <button className="rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-xs text-muted-foreground hover:bg-surface-elevated hover:text-foreground">
-          ⌘K
-        </button>
-        <button className="rounded-md border border-border bg-surface px-3 py-1.5 font-mono text-xs text-foreground hover:bg-surface-elevated">
-          <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-warning align-middle" />
-          Connect wallet
-        </button>
+        <ConnectWallet />
       </div>
     </div>
   );
