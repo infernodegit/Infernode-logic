@@ -5,7 +5,7 @@ export const Route = createFileRoute("/docs")({
   head: () => ({
     meta: [
       { title: "Docs · InferNode" },
-      { name: "description", content: "InferNode developer documentation — worker CLI, API, and Anchor program reference." },
+      { name: "description", content: "InferNode developer documentation — worker CLI, API, and on-chain payment reference." },
     ],
   }),
   component: Docs,
@@ -15,14 +15,25 @@ const SECTIONS = [
   { id: "intro", label: "Introduction" },
   { id: "buyer", label: "Buyer API" },
   { id: "worker", label: "Worker CLI" },
-  { id: "anchor", label: "Anchor program" },
+  { id: "anchor", label: "On-chain program" },
 ];
 
 function Docs() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
-      <div className="mx-auto grid max-w-7xl gap-12 px-6 py-16 lg:grid-cols-[200px_minmax(0,1fr)]">
+
+      <div className="border-b border-border bg-surface/40 lg:hidden">
+        <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 py-2">
+          {SECTIONS.map((s) => (
+            <a key={s.id} href={`#${s.id}`} className="shrink-0 rounded px-3 py-1.5 font-mono text-xs text-muted-foreground hover:bg-surface hover:text-foreground">
+              {s.label}
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <div className="mx-auto grid max-w-7xl gap-12 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[200px_minmax(0,1fr)]">
         <aside className="hidden lg:block">
           <nav className="sticky top-20 space-y-1">
             <div className="px-2 pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -42,33 +53,25 @@ function Docs() {
             <h1 className="mt-2 text-4xl font-semibold tracking-tight">InferNode developer docs</h1>
             <p className="mt-3 max-w-2xl text-muted-foreground">
               Everything you need to submit inference jobs as a buyer or earn as a provider.
-              This is a hybrid marketplace: payments and registry on Solana, execution off-chain.
+              This is a hybrid marketplace: payments are verified on-chain on Solana; the registry,
+              job dispatch, and execution run off-chain.
             </p>
           </section>
 
           <Block id="buyer" title="Buyer API">
             <p className="text-sm text-muted-foreground">
-              Create a job via the REST API or the web app. Funds are locked in an
-              Anchor escrow PDA until the result is delivered.
+              Create a job from the web app. Payment is a direct SOL transfer to the
+              protocol treasury, verified on-chain before the job is queued.
             </p>
-            <CodeBlock language="HTTP">
-{`POST /v1/jobs
-Authorization: Wallet <signed-message>
+            <CodeBlock language="flow">
+{`1. createJob(task, model, input, maxOutputTokens)
+   → { id, priceLamports, treasury, status: "PENDING_PAYMENT" }
 
-{
-  "task": "text-generation",
-  "model": "llama3.1:8b",
-  "input": "Summarize the Solana whitepaper.",
-  "max_output_tokens": 512
-}
+2. Wallet sends priceLamports to the treasury wallet
 
-201 Created
-{
-  "id": "job_a91b",
-  "escrow_pda": "7Hk2...fQp9",
-  "price_lamports": 285000,
-  "status": "PENDING_PAYMENT"
-}`}
+3. confirmJobPayment(jobId, txSignature)
+   → server verifies the transfer on-chain
+   → { status: "QUEUED" }`}
             </CodeBlock>
           </Block>
 
@@ -78,24 +81,27 @@ Authorization: Wallet <signed-message>
               inference against your configured endpoint, and submits the result.
             </p>
             <CodeBlock language="bash">
-{`# Install
-npm i -g infernode-worker
+{`# The worker ships with the repo. Register on the Providers page
+# first to get your API key, then from the project root:
 
-# Init & register
-infernode provider init
-infernode provider set-endpoint --url http://localhost:11434 --mode ollama
-infernode provider register --stake 5 --model llama3.1:8b --price 0.00048
+# Authenticate with the API key shown after registration
+node cli/infernode.mjs provider login --key infq_...
+
+# Point the worker at your inference backend
+node cli/infernode.mjs provider set-endpoint --url http://localhost:11434 --mode ollama
 
 # Run
-infernode worker start
-infernode worker status`}
+node cli/infernode.mjs worker start
+node cli/infernode.mjs provider status`}
             </CodeBlock>
           </Block>
 
-          <Block id="anchor" title="Anchor program">
+          <Block id="anchor" title="On-chain program (roadmap)">
             <p className="text-sm text-muted-foreground">
-              On-chain logic lives in a single Anchor program: provider registry,
-              job escrows, payout release, and refund / slash paths.
+              Today payments settle by direct transfer to the protocol treasury,
+              verified server-side on-chain. A trust-minimized Anchor escrow program
+              is written but not yet deployed — escrow release, refunds, and slashing
+              are coming soon. The planned instruction set:
             </p>
             <CodeBlock language="rust">
 {`initialize_registry(treasury)
