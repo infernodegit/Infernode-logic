@@ -1,5 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
+import { useEffect, useState } from "react";
+import { listModels } from "@/lib/server-fns";
+import { SOLANA_CLUSTER } from "@/lib/solana-config";
+
+const LAMPORTS_PER_SOL = 1_000_000_000;
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -25,8 +30,8 @@ function Landing() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
-      <Hero />
       <Marquee />
+      <Hero />
       <HowItWorks />
       <Sides />
       <Models />
@@ -47,12 +52,12 @@ function Hero() {
         style={{ background: "linear-gradient(90deg, transparent, var(--color-primary), transparent)" }}
       />
 
-      <div className="relative mx-auto max-w-7xl px-6 pt-24 pb-28">
+      <div className="relative mx-auto max-w-7xl px-4 pt-14 pb-16 sm:px-6 sm:pt-24 sm:pb-28">
         <div className="mx-auto max-w-3xl text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface/80 px-3 py-1 backdrop-blur">
             <span className="status-dot" />
             <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-              Live on Solana devnet
+              Live on Solana {SOLANA_CLUSTER}
             </span>
           </div>
 
@@ -86,7 +91,7 @@ function Hero() {
           </div>
 
           <div className="mt-6 font-mono text-[11px] text-muted-foreground">
-            $ npm i -g infernode-worker
+            $ node cli/infernode.mjs worker start
           </div>
         </div>
 
@@ -107,7 +112,7 @@ function TerminalPreview() {
             <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40" />
           </div>
           <div className="font-mono text-[11px] text-muted-foreground">
-            infernode worker start — devnet
+            infernode worker start — {SOLANA_CLUSTER}
           </div>
           <div className="font-mono text-[11px] text-success">● ONLINE</div>
         </div>
@@ -126,7 +131,7 @@ function TerminalPreview() {
 [14:02:18] inference complete  ✓
            output: 248 tok | 4.1s
 [14:02:18] submitting result hash ...
-[14:02:19] payout queued       0.00284 SOL`}</span>
+[14:02:19] earnings pending     0.00284 SOL`}</span>
           </pre>
           <div className="flex flex-col p-5">
             <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -143,14 +148,14 @@ function TerminalPreview() {
 
             <div className="mt-5 flex-1 rounded-md border border-border bg-background p-3">
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                Escrow PDA
+                Treasury payment
               </div>
               <div className="mt-1 truncate font-mono text-[11px] text-foreground">
-                7Hk2…fQp9
+                5xQ2…aB9p
               </div>
               <div className="mt-3 flex items-center justify-between font-mono text-[11px]">
                 <span className="text-muted-foreground">status</span>
-                <span className="text-success">● RESULT_SUBMITTED</span>
+                <span className="text-success">● VERIFIED ON-CHAIN</span>
               </div>
             </div>
           </div>
@@ -169,18 +174,50 @@ function Stat({ k, v }: { k: string; v: string }) {
   );
 }
 
-function Marquee() {
-  const items = [
-    "OLLAMA", "vLLM", "OPENAI-COMPATIBLE", "ANCHOR ESCROW", "SOL · USDC", "LLAMA 3.1",
-    "MISTRAL", "EMBEDDINGS", "DEEPSEEK", "QWEN 2.5", "STAKED PROVIDERS",
-  ];
+const MARQUEE_ITEMS = [
+  { label: "Ollama",            img: "https://cdn.simpleicons.org/ollama/white" },
+  { label: "vLLM",              img: "https://cdn.simpleicons.org/vllm/white" },
+  { label: "OpenAI Compatible", img: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZiI+PHBhdGggZD0iTTIyLjI4MTkgOS44MjExYTUuOTg0NyA1Ljk4NDcgMCAwIDAtLjUxNTctNC45MTA4IDYuMDQ2MiA2LjA0NjIgMCAwIDAtNi41MDk4LTIuOUE2LjA2NTEgNi4wNjUxIDAgMCAwIDQuOTgwNyA0LjE4MThhNS45ODQ3IDUuOTg0NyAwIDAgMC0zLjk5NzcgMi45IDYuMDQ2MiA2LjA0NjIgMCAwIDAgLjc0MjcgNy4wOTY2IDUuOTggNS45OCAwIDAgMCAuNTExIDQuOTEwNyA2LjA1MSA2LjA1MSAwIDAgMCA2LjUxNDYgMi45MDAxQTUuOTg0NyA1Ljk4NDcgMCAwIDAgMTMuMjU5OSAyNGE2LjA1NTcgNi4wNTU3IDAgMCAwIDUuNzcxOC00LjIwNTggNS45ODk0IDUuOTg5NCAwIDAgMCAzLjk5NzctMi45MDAxIDYuMDU1NyA2LjA1NTcgMCAwIDAtLjc0NzUtNy4wNzI5em0tOS4wMjIgMTIuNjA4MWE0LjQ3NTUgNC40NzU1IDAgMCAxLTIuODc2NC0xLjA0MDhsLjE0MTktLjA4MDQgNC43NzgzLTIuNzU4MmEuNzk0OC43OTQ4IDAgMCAwIC4zOTI3LS42ODEzdi02LjczNjlsMi4wMiAxLjE2ODZhLjA3MS4wNzEgMCAwIDEgLjAzOC4wNTJ2NS41ODI2YTQuNTA0IDQuNTA0IDAgMCAxLTQuNDk0NSA0LjQ5NDR6bS05LjY2MDctNC4xMjU0YTQuNDcwOCA0LjQ3MDggMCAwIDEtLjUzNDYtMy4wMTM3bC4xNDIuMDg1MiA0Ljc4MyAyLjc1ODJhLjc3MTIuNzcxMiAwIDAgMCAuNzgwNiAwbDUuODQyOC0zLjM2ODV2Mi4zMzI0YS4wODA0LjA4MDQgMCAwIDEtLjAzMzIuMDYxNUw5Ljc0IDE5Ljk1MDJhNC40OTkyIDQuNDk5MiAwIDAgMS02LjE0MDgtMS42NDY0ek0yLjM0MDggNy44OTU2YTQuNDg1IDQuNDg1IDAgMCAxIDIuMzY1NS0xLjk3MjhWMTEuNmEuNzY2NC43NjY0IDAgMCAwIC4zODc5LjY3NjVsNS44MTQ0IDMuMzU0My0yLjAyMDEgMS4xNjg1YS4wNzU3LjA3NTcgMCAwIDEtLjA3MSAwbC00LjgzMDMtMi43ODY1QTQuNTA0IDQuNTA0IDAgMCAxIDIuMzQwOCA3Ljg3MnptMTYuNTk2MyAzLjg1NThMMTMuMTAzOCA4LjM2NCAxNS4xMTkyIDcuMmEuMDc1Ny4wNzU3IDAgMCAxIC4wNzEgMGw0LjgzMDMgMi43OTEzYTQuNDk0NCA0LjQ5NDQgMCAwIDEtLjY3NjUgOC4xMDQydi01LjY3NzJhLjc5Ljc5IDAgMCAwLS40MDctLjY2N3ptMi4wMTA3LTMuMDIzMWwtLjE0Mi0uMDg1Mi00Ljc3MzUtMi43ODE4YS43NzU5Ljc3NTkgMCAwIDAtLjc4NTQgMEw5LjQwOSA5LjIyOTdWNi44OTc0YS4wNjYyLjA2NjIgMCAwIDEgLjAyODQtLjA2MTVsNC44MzAzLTIuNzg2NmE0LjQ5OTIgNC40OTkyIDAgMCAxIDYuNjgwMiA0LjY2ek04LjMwNjUgMTIuODYzbC0yLjAyLTEuMTYzOGEuMDgwNC4wODA0IDAgMCAxLS4wMzgtLjA1NjdWNi4wNzQyYTQuNDk5MiA0LjQ5OTIgMCAwIDEgNy4zNzU3LTMuNDUzN2wtLjE0Mi4wODA1TDguNzA0IDUuNDU5YS43OTQ4Ljc5NDggMCAwIDAtLjM5MjcuNjgxM3ptMS4wOTc2LTIuMzY1NGwyLjYwMi0xLjQ5OTggMi42MDY5IDEuNDk5OHYyLjk5OTRsLTIuNTk3NCAxLjQ5OTctMi42MDY3LTEuNDk5N1oiLz48L3N2Zz4=" },
+  { label: "Anchor Escrow",     img: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyYTMgMyAwIDEgMCAwIDYgMyAzIDAgMCAwIDAtNnptMCA0YTEgMSAwIDEgMSAwLTIgMSAxIDAgMCAxIDAgMnptNiA2aC01di0xLjY4bDIuNzIgMi43MiAxLjQxLTEuNDFMMTIgNyA2Ljg3IDEyLjAzbDEuNDEgMS40MUwxMSAxMC43NlYxMkg2YTEgMSAwIDAgMCAwIDJoNXY0LjkzQTYgNiAwIDAgMSA2IDE3LjVhMSAxIDAgMCAwIDAgMiA4IDggMCAwIDAgNi02LjQzQTggOCAwIDAgMCAxOCAxOS41YTEgMSAwIDAgMCAwLTIgNiA2IDAgMCAxLTUtNS41N1YxNGg1YTEgMSAwIDAgMCAwLTJ6Ii8+PC9zdmc+" },
+  { label: "SOL",               img: "https://cdn.simpleicons.org/solana" },
+  { label: "Llama 3.1",         img: "https://cdn.simpleicons.org/meta" },
+  { label: "Mistral",           img: "https://cdn.simpleicons.org/mistralai" },
+  { label: "Embeddings",        img: "https://cdn.simpleicons.org/huggingface" },
+  { label: "DeepSeek",          img: "https://cdn.simpleicons.org/deepseek" },
+  { label: "Qwen 2.5",          img: "https://cdn.simpleicons.org/qwen" },
+  { label: "Verified Payments", img: "https://cdn.simpleicons.org/solana" },
+];
+
+function LogoItem({ label, img }: { label: string; img: string }) {
+  const [failed, setFailed] = useState(false);
   return (
-    <div className="border-b border-border bg-surface/40">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-8 gap-y-3 px-6 py-5">
-        {items.map((i) => (
-          <span key={i} className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            {i}
-          </span>
+    <div className="flex flex-shrink-0 select-none items-center px-8">
+      {!failed ? (
+        <img
+          src={img}
+          alt={label}
+          className="h-7 w-auto max-w-[100px] object-contain opacity-70"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className="whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+          {label}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Marquee() {
+  const doubled = [...MARQUEE_ITEMS, ...MARQUEE_ITEMS];
+  return (
+    <div className="overflow-hidden border-b border-border bg-surface/40">
+      <div
+        style={{ display: "flex", animation: "marquee 38s linear infinite", width: "max-content" }}
+        className="items-center py-5"
+      >
+        {doubled.map((item, i) => (
+          <LogoItem key={i} label={item.label} img={item.img} />
         ))}
       </div>
     </div>
@@ -192,13 +229,13 @@ function HowItWorks() {
     {
       n: "01",
       t: "Submit",
-      d: "Connect wallet. Choose a task — text generation, summarization, embeddings, classification. Pay into a Solana escrow.",
+      d: "Connect wallet. Choose a task — text generation, summarization, embeddings, classification. Pay in SOL, verified on-chain.",
       code: "POST /jobs\n{ task: 'text-generation',\n  model: 'llama3.1',\n  input: '...' }",
     },
     {
       n: "02",
       t: "Dispatch",
-      d: "The job lands in a queue. Capable, staked providers running infernode-worker poll for matching tasks.",
+      d: "The job lands in a queue. Capable providers running infernode-worker poll for matching tasks.",
       code: "worker.poll()\n→ job_a91b\n  llama3.1 · 312 tok",
     },
     {
@@ -210,8 +247,8 @@ function HowItWorks() {
     {
       n: "04",
       t: "Settle",
-      d: "Anchor program releases payment to the provider, minus protocol fee. Refunds on timeout. Disputable window for failures.",
-      code: "release_payment(job_a91b)\n→ provider: 0.00284 SOL\n→ treasury: 0.00015 SOL",
+      d: "The buyer's payment is verified on-chain before the job runs. Automated provider payouts and refunds via the Anchor escrow program are coming soon.",
+      code: "verify_payment(tx)\n→ signer · treasury · amount ✓\n→ status: QUEUED",
     },
   ];
 
@@ -245,7 +282,8 @@ function HowItWorks() {
 function Sides() {
   return (
     <section className="border-b border-border bg-surface/30">
-      <div className="mx-auto grid max-w-7xl gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-2 mx-6 my-20" style={{ marginInline: "auto" }}>
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20">
+      <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-2">
         <SideCard
           tag="For buyers"
           title="Cheap inference, on demand."
@@ -254,22 +292,23 @@ function Sides() {
             "Wallet-native: no signup",
             "Per-token pricing, transparent fees",
             "Multiple supported task types",
-            "Job history + result hashes on-chain",
+            "Job history + verifiable result hashes",
           ]}
           cta={{ to: "/app/new", label: "Submit a job →" }}
         />
         <SideCard
           tag="For providers"
           title="Monetize idle compute."
-          desc="Run infernode-worker on your GPU box, VPS, or wire up a hosted OpenAI-compatible endpoint. Stake to join, earn per job."
+          desc="Run infernode-worker on your GPU box, VPS, or wire up a hosted OpenAI-compatible endpoint. Connect your endpoint to join and earn per job."
           bullets={[
             "Ollama, vLLM & OpenAI-compatible",
             "Set your own prices per model",
-            "Provider stake + reputation",
-            "Automatic payouts via Anchor escrow",
+            "Reputation tracking per provider",
+            "Staking + auto payouts (coming soon)",
           ]}
           cta={{ to: "/providers", label: "Become a provider →" }}
         />
+      </div>
       </div>
     </section>
   );
@@ -307,42 +346,86 @@ function SideCard({
   );
 }
 
+interface ModelRow {
+  modelName: string;
+  taskType: string;
+  providerCount: number;
+  minPriceLamports: number;
+}
+
 function Models() {
-  const rows = [
-    { model: "llama3.1:8b", task: "text-generation", providers: 14, price: "0.00048" },
-    { model: "llama3.1:70b", task: "text-generation", providers: 4, price: "0.00310" },
-    { model: "mistral:7b", task: "text-generation", providers: 11, price: "0.00041" },
-    { model: "qwen2.5:14b", task: "summarization", providers: 6, price: "0.00072" },
-    { model: "nomic-embed-text", task: "embedding", providers: 9, price: "0.00009" },
-    { model: "deepseek-coder:6.7b", task: "code-review", providers: 5, price: "0.00065" },
-  ];
+  const [rows, setRows] = useState<ModelRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    listModels()
+      .then((r) => setRows(r))
+      .catch(() => setRows([]))
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const fmtPrice = (lamports: number) => (lamports / LAMPORTS_PER_SOL).toFixed(5);
 
   return (
     <section className="border-b border-border">
       <div className="mx-auto max-w-7xl px-6 py-20">
         <SectionHead label="02 / Catalog" title="Models available across the network." />
 
-        <div className="mt-10 overflow-hidden rounded-lg border border-border">
-          <div className="grid grid-cols-12 border-b border-border bg-surface px-5 py-3 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-            <div className="col-span-5">Model</div>
-            <div className="col-span-3">Task</div>
-            <div className="col-span-2">Providers</div>
-            <div className="col-span-2 text-right">SOL / 1K tok</div>
+        {!loaded ? (
+          <div className="mt-10 rounded-lg border border-border bg-surface/40 p-10 text-center font-mono text-sm text-muted-foreground">
+            Loading live catalog…
           </div>
-          {rows.map((r) => (
-            <div
-              key={r.model}
-              className="grid grid-cols-12 items-center border-b border-border px-5 py-3 last:border-b-0 hover:bg-surface/60"
+        ) : rows.length === 0 ? (
+          <div className="mt-10 rounded-lg border border-border bg-surface/40 p-10 text-center">
+            <p className="font-mono text-sm text-foreground">No models registered yet.</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Be the first — register as a provider and your models appear here live.
+            </p>
+            <Link
+              to="/providers"
+              className="mt-6 inline-flex rounded-md border border-border bg-surface px-4 py-2 font-mono text-xs text-foreground hover:bg-surface-elevated"
             >
-              <div className="col-span-5 font-mono text-sm text-foreground">{r.model}</div>
-              <div className="col-span-3 font-mono text-xs text-muted-foreground">{r.task}</div>
-              <div className="col-span-2 flex items-center gap-2 font-mono text-xs text-foreground">
-                <span className="status-dot" /> {r.providers}
-              </div>
-              <div className="col-span-2 text-right font-mono text-sm text-foreground">{r.price}</div>
+              Become a provider →
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-10 overflow-hidden rounded-lg border border-border">
+            <div className="hidden grid-cols-12 border-b border-border bg-surface px-5 py-3 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground sm:grid">
+              <div className="col-span-5">Model</div>
+              <div className="col-span-3">Task</div>
+              <div className="col-span-2">Providers</div>
+              <div className="col-span-2 text-right">SOL / 1K tok</div>
             </div>
-          ))}
-        </div>
+            <div className="hidden sm:block">
+              {rows.map((r) => (
+                <div
+                  key={`${r.modelName}-${r.taskType}`}
+                  className="grid grid-cols-12 items-center border-b border-border px-5 py-3 last:border-b-0 hover:bg-surface/60"
+                >
+                  <div className="col-span-5 font-mono text-sm text-foreground">{r.modelName}</div>
+                  <div className="col-span-3 font-mono text-xs text-muted-foreground">{r.taskType}</div>
+                  <div className="col-span-2 flex items-center gap-2 font-mono text-xs text-foreground">
+                    <span className="status-dot" /> {r.providerCount}
+                  </div>
+                  <div className="col-span-2 text-right font-mono text-sm text-foreground">{fmtPrice(r.minPriceLamports)}</div>
+                </div>
+              ))}
+            </div>
+            <div className="divide-y divide-border sm:hidden">
+              {rows.map((r) => (
+                <div key={`${r.modelName}-${r.taskType}`} className="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <div className="font-mono text-sm text-foreground">{r.modelName}</div>
+                    <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                      {r.taskType} · <span className="status-dot inline-block align-middle" /> {r.providerCount} providers
+                    </div>
+                  </div>
+                  <div className="font-mono text-sm text-foreground">{fmtPrice(r.minPriceLamports)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -419,27 +502,27 @@ function Architecture() {
 
         <div className="mt-12 overflow-x-auto rounded-lg border border-border bg-surface p-6">
           <pre className="min-w-fit font-mono text-[12px] leading-relaxed text-foreground/85">
-{`┌──────────────────┐    submit job + pay     ┌──────────────────────┐
-│   Buyer (web)    │ ─────────────────────▶  │  Anchor Escrow PDA   │
-│ wallet · prompt  │                         │  amount · expires_at │
+{`┌──────────────────┐   pay treasury (SOL)    ┌──────────────────────┐
+│   Buyer (web)    │ ─────────────────────▶  │    Solana mainnet    │
+│ wallet · prompt  │                         │   treasury wallet    │
 └────────┬─────────┘                         └──────────┬───────────┘
          │                                              │
-         │ job metadata                                 │ assign · release
+         │ job + tx signature                           │ server verifies tx
          ▼                                              ▼
 ┌──────────────────┐    dispatch via queue   ┌──────────────────────┐
 │  Backend (API)   │ ───────────────────────▶│  Worker CLI (provider)│
-│  postgres·redis  │ ◀───────────────────────│  ollama / vllm / api │
+│  postgres queue  │ ◀───────────────────────│  ollama / vllm / api │
 └────────┬─────────┘   result + hash          └──────────────────────┘
          │
          ▼
-   buyer sees result, provider receives payout`}
+   buyer sees result · escrow auto-payout coming soon`}
           </pre>
         </div>
 
         <div className="mt-8 grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
           {[
-            ["On-chain", "Provider registry, escrow PDAs, payment release, refund + slash paths."],
-            ["Off-chain", "Job queue, dispatcher, result storage, reputation scoring."],
+            ["On-chain", "Real SOL payments to the treasury, verified server-side. Escrow PDAs + refund/slash paths coming soon."],
+            ["Off-chain", "Postgres-backed job queue, dispatcher, result storage, reputation scoring."],
             ["Edge", "Worker CLI on provider hardware. Polls jobs, runs inference, submits result + hash."],
           ].map(([t, d]) => (
             <div key={t} className="bg-background p-6">
