@@ -6,7 +6,7 @@ const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
   throw new Error(
-    "DATABASE_URL is not set. Provision the Replit PostgreSQL database first.",
+    "DATABASE_URL is not set. Provide a PostgreSQL connection string first.",
   );
 }
 
