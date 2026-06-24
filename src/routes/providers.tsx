@@ -107,7 +107,7 @@ function Providers() {
           <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
             Setup
           </div>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Get a worker running in 4 commands.</h2>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Get a worker running in 3 commands.</h2>
 
           <div className="mt-8 overflow-hidden rounded-lg border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-4 py-2 font-mono text-[11px] text-muted-foreground">
@@ -115,16 +115,14 @@ function Providers() {
               <span>bash</span>
             </div>
             <pre className="overflow-x-auto p-4 font-mono text-[12px] leading-relaxed text-foreground/90 sm:p-5 sm:text-[13px]">
-{`$ npm i -g infernode-worker
-
-$ infernode provider login
+{`$ node cli/infernode.mjs provider login --key infq_...
   → paste your API key from the Register form
 
-$ infernode provider set-endpoint \\
+$ node cli/infernode.mjs provider set-endpoint \\
     --url http://localhost:11434 \\
     --mode ollama
 
-$ infernode worker start
+$ node cli/infernode.mjs worker start
   → polling jobs · ctrl-c to stop`}
             </pre>
           </div>
@@ -271,7 +269,7 @@ function RegisterForm({ onDone }: { onDone: () => void }) {
         <div className="font-mono text-xs uppercase tracking-wider text-success">Provider registered</div>
         <p className="mt-2 font-mono text-xs text-muted-foreground">
           Save this API key now — it is shown only once. Use it with the worker CLI
-          (<span className="text-foreground">infernode provider login</span>).
+          (<span className="text-foreground">node cli/infernode.mjs provider login --key …</span>).
         </p>
         <div className="mt-3 break-all rounded border border-border bg-background p-3 font-mono text-xs text-foreground">
           {apiKey}
