@@ -10,7 +10,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import logoUrl from "../assets/logo-b64";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { reportError } from "../lib/error-reporting";
 import { SolanaProviders } from "../components/solana/wallet-provider";
 
 function NotFoundComponent() {
@@ -37,7 +37,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (
@@ -95,8 +95,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "InferNode is a Solana-powered marketplace for AI inference compute." },
       { property: "og:description", content: "InferNode is a Solana-powered marketplace for AI inference compute." },
       { name: "twitter:description", content: "InferNode is a Solana-powered marketplace for AI inference compute." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/20eadc2a-9040-4a1e-ba4a-d8fabdd29eb9/id-preview-d6a25bd6--77617343-e489-4e14-8dda-b0077465526e.lovable.app-1782212578147.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/20eadc2a-9040-4a1e-ba4a-d8fabdd29eb9/id-preview-d6a25bd6--77617343-e489-4e14-8dda-b0077465526e.lovable.app-1782212578147.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
