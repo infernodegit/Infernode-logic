@@ -17,41 +17,43 @@ function Pricing() {
       <SiteHeader />
 
       <section className="border-b border-border">
-        <div className="mx-auto max-w-4xl px-6 py-20 text-center">
+        <div className="mx-auto max-w-4xl px-4 py-16 text-center sm:px-6 sm:py-20">
           <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Pricing</div>
-          <h1 className="mt-3 text-balance text-5xl font-semibold tracking-tight md:text-6xl">
+          <h1 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-5xl md:text-6xl">
             Per token. Per job. Nothing else.
           </h1>
-          <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
-            No subscriptions, no minimums. Pay the protocol baseline plus your provider's per-token rate.
+          <p className="mx-auto mt-4 max-w-xl text-sm text-muted-foreground sm:text-base">
+            No subscriptions, no minimums. Pay the protocol baseline plus the network per-token rate.
           </p>
         </div>
       </section>
 
       <section className="border-b border-border">
-        <div className="mx-auto grid max-w-7xl gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3 mx-6 my-16">
-          <Tier
-            name="Buyer"
-            price="0.0001"
-            unit="SOL base fee + 0.0005 / 1K tok"
-            features={["Per-token billing", "Escrow protection", "Refunds on timeout", "Multi-model selection"]}
-            cta={{ to: "/app/new", label: "Submit a job →" }}
-          />
-          <Tier
-            highlight
-            name="Provider"
-            price="5%"
-            unit="protocol fee on job revenue"
-            features={["Set your own per-model price", "Stake-based reputation", "Automatic payouts", "Run any compatible engine"]}
-            cta={{ to: "/providers", label: "Become a provider →" }}
-          />
-          <Tier
-            name="Enterprise"
-            price="Custom"
-            unit="dedicated capacity & SLA"
-            features={["Priority queueing", "Dedicated providers", "Volume discounts", "Direct support channel"]}
-            cta={{ to: "/docs", label: "Contact us →" }}
-          />
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16">
+          <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
+            <Tier
+              name="Buyer"
+              price="0.0001"
+              unit="SOL base fee + 0.0005 / 1K tok"
+              features={["Per-token billing", "On-chain payment verification", "Multi-model selection", "Escrow + refunds (coming soon)"]}
+              cta={{ to: "/app/new", label: "Submit a job →" }}
+            />
+            <Tier
+              highlight
+              name="Provider"
+              price="5%"
+              unit="protocol fee on job revenue"
+              features={["Fixed network per-token rate", "Reputation tracking", "Run any compatible engine", "Staking + auto payouts (coming soon)"]}
+              cta={{ to: "/providers", label: "Become a provider →" }}
+            />
+            <Tier
+              name="Enterprise"
+              price="Custom"
+              unit="dedicated capacity & SLA"
+              features={["Priority queueing", "Dedicated providers", "Volume discounts", "Direct support channel"]}
+              cta={{ to: "/docs", label: "Contact us →" }}
+            />
+          </div>
         </div>
       </section>
 
@@ -71,7 +73,7 @@ function Tier({
   highlight?: boolean;
 }) {
   return (
-    <div className={"flex flex-col p-8 " + (highlight ? "bg-surface" : "bg-background")}>
+    <div className={"flex flex-col p-6 sm:p-8 " + (highlight ? "bg-surface" : "bg-background")}>
       <div className="flex items-center justify-between">
         <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">{name}</div>
         {highlight && (
