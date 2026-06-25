@@ -32,20 +32,35 @@ function Dashboard() {
       return;
     }
     const walletAddress = publicKey.toBase58();
-    let active = true;
-    setLoading(true);
-    Promise.all([
-      listJobs({ data: { walletAddress } }),
-      buyerStats({ data: { walletAddress } }),
-    ])
-      .then(([j, s]) => {
-        if (!active) return;
+    let cancelled = false;
+    const load = async (background: boolean) => {
+      if (!background) setLoading(true);
+      try {
+        const [j, s] = await Promise.all([
+          listJobs({ data: { walletAddress } }),
+          buyerStats({ data: { walletAddress } }),
+        ]);
+        if (cancelled) return;
         setJobs(j as Job[]);
         setStats(s);
-      })
-      .finally(() => active && setLoading(false));
+      } catch {
+        // Ignore transient errors on background polls; the next poll retries.
+      } finally {
+        if (!cancelled && !background) setLoading(false);
+      }
+    };
+    load(false);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") load(true);
+    }, 8000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
-      active = false;
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [publicKey]);
 
