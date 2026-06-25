@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 import { Connection } from "@solana/web3.js";
 import { db } from "../db";
@@ -7,6 +7,27 @@ import { computePrice, estimateTokensFromText, TASK_TYPES } from "../lib/pricing
 import { SERVER_SOLANA_RPC_URL, TREASURY_WALLET } from "../lib/solana-config";
 
 const JOB_TTL_MS = 1000 * 60 * 30;
+
+// A job that a worker claimed (ASSIGNED/RUNNING) but never finished within this
+// window is treated as stale — the worker likely crashed — and is returned to the
+// queue so another provider can pick it up. Generous enough to cover slow models.
+const STALE_CLAIM_MS = 1000 * 60 * 10;
+
+/**
+ * Returns jobs that a provider claimed but never completed back to the QUEUED
+ * pool. This is a lazy reaper: it runs whenever any worker polls for the next
+ * job, so we never strand a paid job in ASSIGNED/RUNNING if a worker crashes —
+ * without needing a separate background process.
+ */
+async function requeueStaleClaims() {
+  await db.execute(sql`
+    UPDATE jobs
+    SET status = 'QUEUED', provider_id = NULL, accepted_at = NULL
+    WHERE status IN ('ASSIGNED', 'RUNNING')
+      AND accepted_at IS NOT NULL
+      AND accepted_at < now() - (${STALE_CLAIM_MS} * interval '1 millisecond')
+  `);
+}
 
 /**
  * Verifies that a Solana transaction really paid the protocol treasury for a
@@ -353,6 +374,8 @@ export async function authProviderByKey(apiKey: string) {
 }
 
 export async function claimNextJob(providerId: string) {
+  // Reclaim anything a crashed worker left stranded before we hand out new work.
+  await requeueStaleClaims();
   const caps = await db
     .select()
     .from(providerCapabilities)
@@ -393,12 +416,25 @@ export async function submitJobResult(
     throw new Error(`Job is not in a submittable state (status: ${job.status})`);
   }
 
+  // The state can change between the read above and the write below (e.g. the
+  // stale-claim reaper requeues the job). Guard the update so a provider that has
+  // lost the assignment can never finalize the job — and only bump the provider's
+  // success/failure counters when the write actually took effect.
+  const guard = and(
+    eq(jobs.id, jobId),
+    eq(jobs.providerId, providerId),
+    inArray(jobs.status, ["ASSIGNED", "RUNNING"]),
+  );
+
   if (failed) {
     const [updated] = await db
       .update(jobs)
       .set({ status: "FAILED", error: output, completedAt: new Date() })
-      .where(eq(jobs.id, jobId))
+      .where(guard)
       .returning();
+    if (!updated) {
+      throw new Error("Job is no longer assigned to you (it may have been requeued).");
+    }
     await db
       .update(providers)
       .set({ failureCount: sql`${providers.failureCount} + 1` })
@@ -415,8 +451,11 @@ export async function submitJobResult(
       resultHash,
       completedAt: new Date(),
     })
-    .where(eq(jobs.id, jobId))
+    .where(guard)
     .returning();
+  if (!updated) {
+    throw new Error("Job is no longer assigned to you (it may have been requeued).");
+  }
   await db
     .update(providers)
     .set({ successCount: sql`${providers.successCount} + 1` })
