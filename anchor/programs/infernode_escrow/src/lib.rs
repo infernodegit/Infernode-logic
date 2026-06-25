@@ -4,6 +4,32 @@ use anchor_lang::system_program;
 // Placeholder program id. Replace with your own (`anchor keys list`) before deploy.
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
+/// Minimum lifetime for a newly funded escrow, in seconds.
+///
+/// `refund` can only fire once `expires_at` has passed, so this floor guarantees
+/// an assigned provider always has at least this long to finish before the buyer
+/// can reclaim funds. Without it a buyer could set a past / near-instant
+/// `expires_at` and refund out from under a provider who has already started the
+/// job. Set generously above the longest expected job duration.
+pub const MIN_ESCROW_SECONDS: i64 = 15 * 60; // 15 minutes
+
+/// Minimum time that must still remain on an escrow when a provider is assigned,
+/// in seconds. Guarantees an assigned provider always has at least this long to
+/// finish before `refund` can fire, even if the job sat in the queue first.
+pub const MIN_ASSIGN_REMAINING_SECONDS: i64 = 5 * 60; // 5 minutes
+
+/// Canonical marketplace authority. Escrows may only be funded naming this key
+/// as authority, and (via `has_one`) only this key can assign/release them.
+/// REPLACE with your authority keypair's pubkey before `anchor build` (see README).
+pub const MARKETPLACE_AUTHORITY: Pubkey =
+    anchor_lang::solana_program::pubkey!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+
+/// Canonical protocol treasury that receives the fee on release. Enforced
+/// on-chain so a buyer cannot substitute their own treasury at funding time.
+/// REPLACE with your treasury pubkey (matches VITE_TREASURY_WALLET) before build.
+pub const PROTOCOL_TREASURY: Pubkey =
+    anchor_lang::solana_program::pubkey!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+
 /// InferNode escrow.
 ///
 /// Flow:
@@ -28,6 +54,27 @@ pub mod infernode_escrow {
         expires_at: i64,
     ) -> Result<()> {
         require!(amount > 0, EscrowError::InvalidAmount);
+
+        // Funds may only be escrowed against the canonical marketplace authority
+        // and treasury, enforced on-chain so a buyer cannot substitute their own.
+        require_keys_eq!(
+            ctx.accounts.authority.key(),
+            MARKETPLACE_AUTHORITY,
+            EscrowError::Unauthorized
+        );
+        require_keys_eq!(
+            ctx.accounts.treasury.key(),
+            PROTOCOL_TREASURY,
+            EscrowError::WrongTreasury
+        );
+
+        // Enforce a minimum escrow lifetime so a buyer cannot set a past /
+        // near-instant `expires_at` and refund out from under a working provider.
+        let now = Clock::get()?.unix_timestamp;
+        let min_expiry = now
+            .checked_add(MIN_ESCROW_SECONDS)
+            .ok_or(EscrowError::MathOverflow)?;
+        require!(expires_at >= min_expiry, EscrowError::ExpiryTooSoon);
 
         let total = amount
             .checked_add(protocol_fee)
@@ -60,8 +107,20 @@ pub mod infernode_escrow {
     }
 
     pub fn assign_provider(ctx: Context<AssignProvider>, provider: Pubkey) -> Result<()> {
+        require!(provider != Pubkey::default(), EscrowError::InvalidProvider);
+        let now = Clock::get()?.unix_timestamp;
         let escrow = &mut ctx.accounts.escrow;
         require!(escrow.status == EscrowStatus::Funded, EscrowError::InvalidState);
+        // Refuse to assign an escrow that is already expired or about to expire:
+        // otherwise `refund` could fire immediately and strand the assigned
+        // provider, who has just committed to doing the work, with no payout.
+        let min_remaining = now
+            .checked_add(MIN_ASSIGN_REMAINING_SECONDS)
+            .ok_or(EscrowError::MathOverflow)?;
+        require!(
+            escrow.expires_at >= min_remaining,
+            EscrowError::AssignWindowClosed
+        );
         escrow.provider = provider;
         escrow.status = EscrowStatus::Assigned;
         Ok(())
@@ -85,15 +144,30 @@ pub mod infernode_escrow {
         );
 
         // Pay the provider and the treasury directly from the PDA's lamports.
+        // This is fund-custody code, so use checked math and an explicit balance
+        // guard: an underflow must error, never wrap.
         let amount = escrow.amount;
         let fee = escrow.protocol_fee;
+        let payout = amount.checked_add(fee).ok_or(EscrowError::MathOverflow)?;
 
-        **ctx.accounts.escrow.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **ctx.accounts.provider.try_borrow_mut_lamports()? += amount;
-
+        let escrow_ai = ctx.accounts.escrow.to_account_info();
+        {
+            let mut escrow_lamports = escrow_ai.try_borrow_mut_lamports()?;
+            **escrow_lamports = (**escrow_lamports)
+                .checked_sub(payout)
+                .ok_or(EscrowError::InsufficientEscrowBalance)?;
+        }
+        {
+            let mut provider_lamports = ctx.accounts.provider.try_borrow_mut_lamports()?;
+            **provider_lamports = (**provider_lamports)
+                .checked_add(amount)
+                .ok_or(EscrowError::MathOverflow)?;
+        }
         if fee > 0 {
-            **ctx.accounts.escrow.to_account_info().try_borrow_mut_lamports()? -= fee;
-            **ctx.accounts.treasury.try_borrow_mut_lamports()? += fee;
+            let mut treasury_lamports = ctx.accounts.treasury.try_borrow_mut_lamports()?;
+            **treasury_lamports = (**treasury_lamports)
+                .checked_add(fee)
+                .ok_or(EscrowError::MathOverflow)?;
         }
 
         // Remaining rent lamports return to the buyer on close (see account attr).
@@ -124,8 +198,19 @@ pub mod infernode_escrow {
             .checked_add(escrow.protocol_fee)
             .ok_or(EscrowError::MathOverflow)?;
 
-        **ctx.accounts.escrow.to_account_info().try_borrow_mut_lamports()? -= refundable;
-        **ctx.accounts.buyer.try_borrow_mut_lamports()? += refundable;
+        let escrow_ai = ctx.accounts.escrow.to_account_info();
+        {
+            let mut escrow_lamports = escrow_ai.try_borrow_mut_lamports()?;
+            **escrow_lamports = (**escrow_lamports)
+                .checked_sub(refundable)
+                .ok_or(EscrowError::InsufficientEscrowBalance)?;
+        }
+        {
+            let mut buyer_lamports = ctx.accounts.buyer.try_borrow_mut_lamports()?;
+            **buyer_lamports = (**buyer_lamports)
+                .checked_add(refundable)
+                .ok_or(EscrowError::MathOverflow)?;
+        }
 
         let escrow = &mut ctx.accounts.escrow;
         escrow.status = EscrowStatus::Refunded;
@@ -246,4 +331,12 @@ pub enum EscrowError {
     WrongBuyer,
     #[msg("Escrow has not expired yet")]
     NotExpired,
+    #[msg("Expiry is too soon; escrow must outlast the minimum job window")]
+    ExpiryTooSoon,
+    #[msg("Provider address is invalid")]
+    InvalidProvider,
+    #[msg("Escrow is expired or too close to expiry to assign a provider")]
+    AssignWindowClosed,
+    #[msg("Escrow PDA has insufficient lamports for this transfer")]
+    InsufficientEscrowBalance,
 }
